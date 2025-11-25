@@ -2,11 +2,10 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <title>Mapa - Marcadores e Desenho (Firebase)</title>
+  <title>Mapa Interativo Firebase</title>
   <style>
     body {
       margin: 0;
-      padding: 0;
       background: #222;
       color: #FFD700;
       font-family: Arial, sans-serif;
@@ -44,62 +43,18 @@
       background-size: contain;
       border: 2px solid #444;
       transform-origin: center center;
-      transform: scale(1);
-      transition: transform 0.15s ease-out;
+      transform: translate(0,0) scale(1);
+      transition: transform 0.05s linear;
     }
 
     .marcador {
       position: absolute;
-      width: 3px;
-      height: 3px;
+      width: 4px;
+      height: 4px;
       border-radius: 50%;
       box-shadow: 0 0 2px #fff;
-      cursor: pointer;
       transform: translate(-50%, -50%);
-    }
-
-    .info {
-      display: none;
-      position: absolute;
-      top: -70px;
-      left: 10px;
-      background: #fff;
-      color: #000;
-      border: 1px solid #444;
-      border-radius: 5px;
-      padding: 6px;
-      font-size: 12px;
-      z-index: 5;
-      min-width: 120px;
-      max-width: 200px;
-    }
-
-    .item-marcador {
-      background: #222;
-      padding: 10px;
-      margin-bottom: 10px;
-      border: 1px solid #444;
-      border-radius: 6px;
-    }
-
-    .item-marcador input, .item-marcador textarea {
-      width: 100%;
-      background: #111;
-      color: #FFD700;
-      border: 1px solid #333;
-      padding: 5px;
-      border-radius: 4px;
-      margin-top: 4px;
-    }
-
-    .item-marcador button {
-      margin-top: 6px;
-      padding: 4px 8px;
-      border: none;
-      border-radius: 4px;
       cursor: pointer;
-      background: #FF1493;
-      color: #fff;
     }
 
     #canvas-desenho {
@@ -110,48 +65,25 @@
       height: 100%;
       pointer-events: none;
       z-index: 150;
-      background: transparent !important;
     }
 
-    #botao-desenhar, #botao-undo, #botao-redo, #botao-limpar {
+    #botao-desenhar, #botao-limpar, #botao-undo, #botao-redo, #cor-desenho {
       position: absolute;
       top: 10px;
       border: none;
       border-radius: 50%;
-      font-size: 18px;
       width: 40px;
       height: 40px;
       cursor: pointer;
-      box-shadow: 0 0 8px #000;
-      z-index: 200;
-      transition: transform 0.2s, background 0.2s;
+      box-shadow: 0 0 6px #000;
+      z-index: 999;
     }
 
-    #botao-desenhar { right: 10px; background: #FF1493; color: white; font-size: 20px; }
-    #botao-undo { right: 60px; background: #222; color: #FFD700; border: 1px solid #FFD700; }
-    #botao-redo { right: 110px; background: #222; color: #FFD700; border: 1px solid #FFD700; }
-    #botao-limpar { right: 160px; background: #8B0000; color: #fff; border: 1px solid #FF5555; }
-
-    #botao-desenhar:hover, #botao-undo:hover, #botao-redo:hover, #botao-limpar:hover {
-      transform: scale(1.1);
-      background: #FFD700;
-      color: #111;
-    }
-
-    #cor-desenho {
-      position: absolute;
-      top: 60px;
-      right: 10px;
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      border: none;
-      padding: 0;
-      cursor: pointer;
-      box-shadow: 0 0 8px #000;
-      background: #222;
-      z-index: 200;
-    }
+    #botao-desenhar { right: 10px; background: #FF1493; color: white; }
+    #botao-limpar { right: 160px; background: #8B0000; color: white; }
+    #botao-undo { right: 60px; background: #222; color: #FFD700; }
+    #botao-redo { right: 110px; background: #222; color: #FFD700; }
+    #cor-desenho { right: 210px; background: #222; }
   </style>
 </head>
 <body>
@@ -163,20 +95,20 @@
   <div id="mapa-container">
     <div id="mapa">
       <canvas id="canvas-desenho"></canvas>
-      <button id="botao-desenhar">✏️</button>
-      <button id="botao-undo">⬅️</button>
-      <button id="botao-redo">➡️</button>
-      <button id="botao-limpar">🗑️</button>
+      <button id="botao-desenhar" title="Desenhar rota">✏️</button>
+      <button id="botao-undo" title="Desfazer">↩️</button>
+      <button id="botao-redo" title="Refazer">↪️</button>
+      <button id="botao-limpar" title="Limpar desenhos">🗑️</button>
       <input type="color" id="cor-desenho" value="#00ff88">
     </div>
   </div>
 
-  <!-- === Firebase SDK === -->
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database.js"></script>
 
   <script>
-    // === CONFIGURAÇÃO DO FIREBASE ===
+    // 🔧 Config Firebase
     const firebaseConfig = {
       apiKey: "AIzaSyD8XXv9g0O_oixHANgXmIv4AxyFQRKujsM",
       authDomain: "redsec-1cc08.firebaseapp.com",
@@ -190,57 +122,93 @@
     const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // === VARIÁVEIS GERAIS ===
-    const mapa = document.getElementById('mapa');
-    const lista = document.getElementById('lista');
-    const canvas = document.getElementById('canvas-desenho');
-    const ctx = canvas.getContext('2d');
-    const botaoDesenhar = document.getElementById('botao-desenhar');
-    const botaoUndo = document.getElementById('botao-undo');
-    const botaoRedo = document.getElementById('botao-redo');
-    const botaoLimpar = document.getElementById('botao-limpar');
-    const corDesenhoInput = document.getElementById('cor-desenho');
+    // 🌍 Variáveis
+    const mapa = document.getElementById("mapa");
+    const lista = document.getElementById("lista");
+    const canvas = document.getElementById("canvas-desenho");
+    const ctx = canvas.getContext("2d");
+    const botaoDesenhar = document.getElementById("botao-desenhar");
+    const botaoLimpar = document.getElementById("botao-limpar");
+    const botaoUndo = document.getElementById("botao-undo");
+    const botaoRedo = document.getElementById("botao-redo");
+    const corDesenhoInput = document.getElementById("cor-desenho");
 
     let marcadores = [];
     let desenhos = [];
     let desenhoAtual = null;
-    let historico = [];
-    let historicoIndex = -1;
     let modoDesenhoAtivo = false;
     let desenhando = false;
     let corDesenho = corDesenhoInput.value;
     let pos = { x: 0, y: 0 };
     let scale = 1;
     let dragging = false;
-    const minScale = 1.5;
-    const maxScale = 10;
+    let startMouse = {};
+    let startPos = {};
 
-    // === FUNÇÕES FIREBASE ===
-    function salvarMarcadores() {
-      db.ref("marcadores").set(marcadores);
+    // 🔹 Canvas resize
+    function redimensionarCanvas() {
+      canvas.width = mapa.clientWidth;
+      canvas.height = mapa.clientHeight;
+      redesenhar();
     }
-    function salvarDesenhos() {
-      db.ref("desenhos").set(desenhos);
-    }
+
+    window.addEventListener("resize", redimensionarCanvas);
+
+    // 🔹 Zoom e Pan
+    mapa.addEventListener("wheel", (e) => {
+      if (modoDesenhoAtivo) return;
+      e.preventDefault();
+      scale += e.deltaY < 0 ? 0.1 : -0.1;
+      scale = Math.min(Math.max(scale, 1), 5);
+      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+      canvas.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+    }, { passive: false });
+
+    mapa.addEventListener("mousedown", (e) => {
+      if (modoDesenhoAtivo || e.button !== 2) return;
+      dragging = true;
+      startMouse = { x: e.clientX, y: e.clientY };
+      startPos = { ...pos };
+      mapa.style.cursor = "grabbing";
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      pos.x = startPos.x + (e.clientX - startMouse.x);
+      pos.y = startPos.y + (e.clientY - startMouse.y);
+      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+      canvas.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+    });
+
+    window.addEventListener("mouseup", () => {
+      dragging = false;
+      mapa.style.cursor = "default";
+    });
+
+    mapa.addEventListener("contextmenu", e => e.preventDefault());
+
+    // 🟣 Firebase sincronização
+    function salvarMarcadores() { db.ref("marcadores").set(marcadores); }
+    function salvarDesenhos() { db.ref("desenhos").set(desenhos); }
+
     function carregarFirebase() {
-      db.ref("marcadores").on("value", (snap) => {
+      db.ref("marcadores").on("value", snap => {
         marcadores = snap.val() || [];
         render();
       });
-      db.ref("desenhos").on("value", (snap) => {
+      db.ref("desenhos").on("value", snap => {
         desenhos = snap.val() || [];
         redesenhar();
       });
     }
 
-    // === CRIAR MARCADORES ===
+    // 🟢 Marcadores
     mapa.addEventListener("click", (e) => {
       if (modoDesenhoAtivo || e.button !== 0) return;
       const rect = mapa.getBoundingClientRect();
       const relX = (e.clientX - rect.left) / rect.width;
       const relY = (e.clientY - rect.top) / rect.height;
-      const id = "mid_" + Date.now();
-      marcadores.push({ id, x: relX, y: relY, titulo: "Novo marcador", descricao: "Adicione informações...", cor: "#FF1493" });
+      marcadores.push({ id: Date.now(), x: relX, y: relY, titulo: "Novo marcador", cor: "#FF1493", descricao: "" });
       salvarMarcadores();
     });
 
@@ -248,74 +216,41 @@
       mapa.querySelectorAll(".marcador").forEach(m => m.remove());
       lista.innerHTML = "";
       marcadores.forEach(m => {
-        const marker = document.createElement("div");
-        marker.className = "marcador";
-        marker.style.background = m.cor;
-        marker.style.left = `${m.x * 768}px`;
-        marker.style.top = `${m.y * 768}px`;
-        mapa.appendChild(marker);
-
-        const item = document.createElement("div");
-        item.className = "item-marcador";
-        item.innerHTML = `
-          <label>Título:</label>
-          <input type="text" value="${m.titulo}" id="titulo_${m.id}">
-          <label>Descrição:</label>
-          <textarea id="desc_${m.id}">${m.descricao}</textarea>
-          <label>Cor:</label>
-          <input type="color" value="${m.cor}" id="cor_${m.id}">
-          <button>Salvar</button>
-          <button class="del">Excluir</button>`;
-        item.querySelector("button").onclick = () => {
-          m.titulo = document.getElementById(`titulo_${m.id}`).value;
-          m.descricao = document.getElementById(`desc_${m.id}`).value;
-          m.cor = document.getElementById(`cor_${m.id}`).value;
-          salvarMarcadores();
-        };
-        item.querySelector(".del").onclick = () => {
-          marcadores = marcadores.filter(mm => mm.id !== m.id);
-          salvarMarcadores();
-        };
-        lista.appendChild(item);
+        const el = document.createElement("div");
+        el.className = "marcador";
+        el.style.background = m.cor;
+        el.style.left = `${m.x * 768}px`;
+        el.style.top = `${m.y * 768}px`;
+        mapa.appendChild(el);
       });
     }
 
-    // === DESENHO ===
-    function redimensionarCanvas() {
-      canvas.width = mapa.clientWidth;
-      canvas.height = mapa.clientHeight;
-      redesenhar();
-    }
-    window.addEventListener('resize', redimensionarCanvas);
-
-    botaoDesenhar.addEventListener('click', () => {
+    // ✏️ Desenho
+    botaoDesenhar.addEventListener("click", () => {
       modoDesenhoAtivo = !modoDesenhoAtivo;
-      canvas.style.pointerEvents = modoDesenhoAtivo ? 'auto' : 'none';
-      botaoDesenhar.style.background = modoDesenhoAtivo ? '#FFD700' : '#FF1493';
+      canvas.style.pointerEvents = modoDesenhoAtivo ? "auto" : "none";
+      botaoDesenhar.style.background = modoDesenhoAtivo ? "#FFD700" : "#FF1493";
     });
 
-    canvas.addEventListener('mousedown', (e) => {
-      if (!modoDesenhoAtivo || e.button !== 0) return;
+    canvas.addEventListener("mousedown", e => {
+      if (!modoDesenhoAtivo) return;
       desenhando = true;
       desenhoAtual = { cor: corDesenho, pontos: [] };
       registrarPonto(e);
     });
 
-    canvas.addEventListener('mousemove', (e) => {
-      if (!modoDesenhoAtivo || !desenhando) return;
+    canvas.addEventListener("mousemove", e => {
+      if (!desenhando) return;
       registrarPonto(e);
       redesenhar();
     });
 
-    window.addEventListener('mouseup', () => {
-      if (desenhando) {
-        desenhando = false;
-        if (desenhoAtual.pontos.length > 1) {
-          desenhos.push(desenhoAtual);
-          salvarDesenhos();
-        }
-        desenhoAtual = null;
-      }
+    window.addEventListener("mouseup", () => {
+      if (!desenhando) return;
+      desenhando = false;
+      desenhos.push(desenhoAtual);
+      salvarDesenhos();
+      desenhoAtual = null;
     });
 
     function registrarPonto(e) {
@@ -343,7 +278,7 @@
       });
     }
 
-    botaoLimpar.addEventListener('click', () => {
+    botaoLimpar.addEventListener("click", () => {
       if (confirm("Apagar todos os desenhos?")) {
         desenhos = [];
         salvarDesenhos();
@@ -351,7 +286,10 @@
       }
     });
 
-    window.addEventListener('load', () => {
+    corDesenhoInput.addEventListener("input", e => corDesenho = e.target.value);
+
+    // 🚀 Inicialização
+    window.addEventListener("load", () => {
       redimensionarCanvas();
       carregarFirebase();
     });
