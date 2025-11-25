@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Mapa - Marcadores e Desenho</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #222;
+      color: #FFD700;
+      font-family: Arial, sans-serif;
+    }
+
+    /* Lista lateral */
+    #lista-marcadores {
+      width: 24vw;
+      min-width: 260px;
+      height: 100vh;
+      overflow-y: auto;
+      position: fixed;
+      left: 0;
+      top: 0;
+      background: #161616;
+      padding: 16px 12px;
+      border-right: 2px solid #444;
+      z-index: 99;
+    }
+
+    #mapa-container {
+      width: 100vw;
+      height: 100vh;
+      margin-left: 24vw;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    #mapa {
+      position: relative;
+      width: 768px;
+      height: 768px;
+      background: url('map.jpg') no-repeat center center;
+      background-size: contain;
+      border: 2px solid #444;
+      transform-origin: center center;
+      transform: scale(1);
+      transition: transform 0.15s ease-out;
+    }
+
+    .marcador {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      box-shadow: 0 0 2px #fff;
+      cursor: pointer;
+      transform: translate(-50%, -50%);
+    }
+
+    .info {
+      display: none;
+      position: absolute;
+      top: -70px;
+      left: 10px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #444;
+      border-radius: 5px;
+      padding: 6px;
+      font-size: 12px;
+      z-index: 5;
+      min-width: 120px;
+      max-width: 200px;
+    }
+
+    .item-marcador {
+      background: #222;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #444;
+      border-radius: 6px;
+    }
+
+    .item-marcador input, .item-marcador textarea {
+      width: 100%;
+      background: #111;
+      color: #FFD700;
+      border: 1px solid #333;
+      padding: 5px;
+      border-radius: 4px;
+      margin-top: 4px;
+    }
+
+    .item-marcador button {
+      margin-top: 6px;
+      padding: 4px 8px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #FF1493;
+      color: #fff;
+    }
+
+    /* === MODO DESENHO === */
+    #canvas-desenho {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 150;
+      background: transparent !important;
+    }
+
+    #botao-desenhar, #botao-undo, #botao-redo, #botao-limpar {
+      position: absolute;
+      top: 10px;
+      border: none;
+      border-radius: 50%;
+      font-size: 18px;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      box-shadow: 0 0 8px #000;
+      z-index: 200;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    #botao-desenhar {
+      right: 10px;
+      background: #FF1493;
+      color: white;
+      font-size: 20px;
+    }
+
+    #botao-undo {
+      right: 60px;
+      background: #222;
+      color: #FFD700;
+      border: 1px solid #FFD700;
+    }
+
+    #botao-redo {
+      right: 110px;
+      background: #222;
+      color: #FFD700;
+      border: 1px solid #FFD700;
+    }
+
+    #botao-limpar {
+      right: 160px;
+      background: #8B0000;
+      color: #fff;
+      border: 1px solid #FF5555;
+    }
+
+    #botao-desenhar:hover, #botao-undo:hover, #botao-redo:hover, #botao-limpar:hover {
+      transform: scale(1.1);
+      background: #FFD700;
+      color: #111;
+    }
+
+    /* Cor do desenho */
+    #cor-desenho {
+      position: absolute;
+      top: 60px;
+      right: 10px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      box-shadow: 0 0 8px #000;
+      background: #222;
+      z-index: 200;
+    }
+  </style>
+</head>
+<body>
+  <div id="lista-marcadores">
+    <h3>Marcadores</h3>
+    <div id="lista"></div>
+  </div>
+
+  <div id="mapa-container">
+    <div id="mapa">
+      <canvas id="canvas-desenho"></canvas>
+      <button id="botao-desenhar" title="Desenhar rota">✏️</button>
+      <button id="botao-undo" title="Desfazer último desenho">⬅️</button>
+      <button id="botao-redo" title="Refazer desenho">➡️</button>
+      <button id="botao-limpar" title="Limpar todos os desenhos">🗑️</button>
+      <!-- seletor de cor do desenho -->
+      <input type="color" id="cor-desenho" title="Cor do desenho" value="#00ff88">
+    </div>
+  </div>
+
+  <script>
+    const mapa = document.getElementById('mapa');
+    const lista = document.getElementById('lista');
+    const canvas = document.getElementById('canvas-desenho');
+    const ctx = canvas.getContext('2d');
+    const botaoDesenhar = document.getElementById('botao-desenhar');
+    const botaoUndo = document.getElementById('botao-undo');
+    const botaoRedo = document.getElementById('botao-redo');
+    const botaoLimpar = document.getElementById('botao-limpar');
+    const corDesenhoInput = document.getElementById('cor-desenho');
+
+    let marcadores = [];
+    let scale = 1;
+    const minScale = 1.5;
+    const maxScale = 10;
+
+    let pos = { x: 0, y: 0 };
+    let dragging = false;
+    let startMouse = { x: 0, y: 0 };
+    let startPos = { x: 0, y: 0 };
+    let modoDesenhoAtivo = false;
+    let desenhando = false;
+
+    // cor atual do desenho
+    let corDesenho = corDesenhoInput.value || '#00ff88';
+
+    corDesenhoInput.addEventListener('input', (e) => {
+      corDesenho = e.target.value;
+      // não mexe nos traços já desenhados (cada um já guarda sua cor)
+    });
+
+    // === Criar marcador ===
+    mapa.addEventListener("click", (e) => {
+      if (modoDesenhoAtivo) return;
+      if (e.button !== 0) return;
+      const rect = mapa.getBoundingClientRect();
+      const relX = (e.clientX - rect.left) / rect.width;
+      const relY = (e.clientY - rect.top) / rect.height;
+      const id = "mid_" + Date.now();
+      marcadores.push({ id, x: relX, y: relY, titulo: "Novo marcador", descricao: "Adicione informações...", cor: "#FF1493" });
+      salvar();
+      render();
+    });
+
+    // === Zoom ===
+    mapa.addEventListener("wheel", (e) => {
+      if (modoDesenhoAtivo) return;
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      scale = Math.max(minScale, Math.min(maxScale, scale + delta));
+      limitarBordas();
+      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+      canvas.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+    }, { passive: false });
+
+    // === Arrastar mapa ===
+    mapa.addEventListener("mousedown", (e) => {
+      if (modoDesenhoAtivo || e.button !== 2) return;
+      dragging = true;
+      startMouse = { x: e.clientX, y: e.clientY };
+      startPos = { ...pos };
+      mapa.style.cursor = "grabbing";
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      pos.x = startPos.x + (e.clientX - startMouse.x);
+      pos.y = startPos.y + (e.clientY - startMouse.y);
+      limitarBordas();
+      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+      canvas.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+    });
+
+    window.addEventListener("mouseup", () => { dragging = false; mapa.style.cursor = "default"; });
+    mapa.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    function limitarBordas() {
+      const container = document.getElementById('mapa-container');
+      const viewW = container.clientWidth, viewH = container.clientHeight;
+      const maxX = viewW / 2, maxY = viewH / 2;
+      pos.x = Math.max(-maxX, Math.min(maxX, pos.x));
+      pos.y = Math.max(-maxY, Math.min(maxY, pos.y));
+    }
+
+    // === Renderização dos marcadores ===
+    function render() {
+      mapa.querySelectorAll(".marcador").forEach(m => m.remove());
+      lista.innerHTML = "";
+      marcadores.forEach(m => {
+        const marker = document.createElement("div");
+        marker.className = "marcador";
+        marker.style.background = m.cor;
+        marker.style.left = `${m.x * 768}px`;
+        marker.style.top = `${m.y * 768}px`;
+
+        const info = document.createElement("div");
+        info.className = "info";
+        info.innerHTML = `<b>${m.titulo}</b><br>${m.descricao}`;
+        marker.appendChild(info);
+
+        marker.onclick = (ev) => {
+          info.style.display = info.style.display === "block" ? "none" : "block";
+          ev.stopPropagation();
+        };
+
+        marker.oncontextmenu = (ev) => {
+          ev.preventDefault();
+          marcadores = marcadores.filter(mm => mm.id !== m.id);
+          salvar(); render();
+        };
+
+        mapa.appendChild(marker);
+
+        const item = document.createElement("div");
+        item.className = "item-marcador";
+        item.innerHTML = `
+          <label>Título:</label>
+          <input type="text" value="${m.titulo}" id="titulo_${m.id}">
+          <label>Descrição:</label>
+          <textarea id="desc_${m.id}">${m.descricao}</textarea>
+          <label>Cor:</label>
+          <input type="color" value="${m.cor}" id="cor_${m.id}">
+          <button>Salvar</button>
+          <button class="del">Excluir</button>`;
+        item.querySelector("button").onclick = () => {
+          m.titulo = document.getElementById(`titulo_${m.id}`).value;
+          m.descricao = document.getElementById(`desc_${m.id}`).value;
+          m.cor = document.getElementById(`cor_${m.id}`).value;
+          salvar(); render();
+        };
+        item.querySelector(".del").onclick = () => {
+          marcadores = marcadores.filter(mm => mm.id !== m.id);
+          salvar(); render();
+        };
+        lista.appendChild(item);
+      });
+    }
+
+    function salvar() { localStorage.setItem("marcadoresMapa", JSON.stringify(marcadores)); }
+    function carregar() {
+      const data = localStorage.getItem("marcadoresMapa");
+      if (data) marcadores = JSON.parse(data);
+      render();
+    }
+
+    // === DESENHO (AGORA COM COR POR TRAÇO) ===
+    // desenhos = [ { cor: '#rrggbb', pontos: [{x,y}, ...] }, ... ]
+    let desenhos = [];
+    let desenhoAtual = null;
+    let historico = [];
+    let historicoIndex = -1;
+
+    function redimensionarCanvas() {
+      canvas.width = mapa.clientWidth;
+      canvas.height = mapa.clientHeight;
+      redesenhar();
+    }
+    window.addEventListener('resize', redimensionarCanvas);
+
+    botaoDesenhar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modoDesenhoAtivo = !modoDesenhoAtivo;
+      canvas.style.pointerEvents = modoDesenhoAtivo ? 'auto' : 'none';
+      botaoDesenhar.style.background = modoDesenhoAtivo ? '#FFD700' : '#FF1493';
+      mapa.style.cursor = modoDesenhoAtivo ? 'crosshair' : 'default';
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+      if (!modoDesenhoAtivo || e.button !== 0) return;
+      desenhando = true;
+      desenhoAtual = { cor: corDesenho, pontos: [] };
+      registrarPonto(e);
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!modoDesenhoAtivo || !desenhando) return;
+      registrarPonto(e);
+      redesenhar();
+    });
+
+    canvas.addEventListener('mouseleave', () => desenhando = false);
+
+    window.addEventListener('mouseup', () => {
+      if (desenhando) {
+        desenhando = false;
+        if (desenhoAtual && desenhoAtual.pontos.length > 1) {
+          desenhos.push(desenhoAtual);
+          salvarEtapa();
+        }
+        desenhoAtual = null;
+      }
+    });
+
+    function registrarPonto(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width;
+      const y = (e.clientY - rect.top) / rect.height;
+      if (!desenhoAtual) return;
+      desenhoAtual.pontos.push({ x, y });
+    }
+
+    function redesenhar() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+
+      const todas = [...desenhos];
+      if (desenhando && desenhoAtual) todas.push(desenhoAtual);
+
+      todas.forEach(traco => {
+        if (!traco.pontos || traco.pontos.length === 0) return;
+        ctx.beginPath();
+        ctx.strokeStyle = traco.cor || "#00ff88";
+        traco.pontos.forEach((p, i) => {
+          const x = p.x * canvas.width;
+          const y = p.y * canvas.height;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      });
+    }
+
+    function salvarEtapa() {
+      historico = historico.slice(0, historicoIndex + 1);
+      historico.push(JSON.stringify(desenhos));
+      historicoIndex = historico.length - 1;
+    }
+
+    function restaurarEtapa() {
+      desenhos = historicoIndex >= 0 ? JSON.parse(historico[historicoIndex]) : [];
+      redesenhar();
+    }
+
+    botaoUndo.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (historicoIndex > 0) { historicoIndex--; restaurarEtapa(); }
+    });
+
+    botaoRedo.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (historicoIndex < historico.length - 1) { historicoIndex++; restaurarEtapa(); }
+    });
+
+    // === LIMPAR TUDO (somente desenhos) ===
+    botaoLimpar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm("Tem certeza que deseja apagar TODOS os desenhos? (Os marcadores permanecerão intactos)")) {
+        desenhos = [];
+        desenhoAtual = null;
+        historico = [];
+        historicoIndex = -1;
+        redesenhar();
+      }
+    });
+
+    window.addEventListener('load', () => {
+      redimensionarCanvas();
+      salvarEtapa();
+      carregar();
+    });
+  </script>
+</body>
+</html>
