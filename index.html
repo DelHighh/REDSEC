@@ -1,4 +1,4 @@
-'<!DOCTYPE html>
+'<!DOCTYPE html>'<!DOCTYPE html>
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
@@ -410,16 +410,9 @@
     });
 
     window.addEventListener("mouseup", () => {
-  dragging = false;
-  mapa.style.cursor = "default";
-});
-
-// Impede o menu de contexto padrão do navegador ao clicar com o botão direito
-mapa.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
-  return false;
-});
-
+      dragging = false;
+      mapa.style.cursor = "default";
+    });
 
     mapa.addEventListener("contextmenu", (e) => e.preventDefault());
 
