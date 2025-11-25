@@ -207,48 +207,6 @@
   
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-  
-    // === SINCRONIZAÇÃO DE MARCADORES ===
-    function syncFirebase() {
-      const marcadoresRef = ref(db, "marcadores");
-      const desenhosRef = ref(db, "desenhos");
-  
-      // 🔄 Atualiza em tempo real ao detectar mudanças
-      onValue(marcadoresRef, (snap) => {
-        const data = snap.val();
-        marcadores = data ? Object.values(data) : [];
-        render();
-      });
-  
-      onValue(desenhosRef, (snap) => {
-        const data = snap.val();
-        desenhos = data ? Object.values(data) : [];
-        renderDesenhos();
-      });
-    }
-  
-    // 🔼 Salva no Firebase
-    function salvar() {
-      set(ref(db, "marcadores"), marcadores.reduce((acc, m) => {
-        acc[m.id] = m;
-        return acc;
-      }, {}));
-    }
-  
-    function salvarDesenhos() {
-      set(ref(db, "desenhos"), desenhos.reduce((acc, d, i) => {
-        acc[i] = d;
-        return acc;
-      }, {}));
-    }
-  
-    // substitua o localStorage no final por:
-    window.addEventListener("load", () => {
-      syncFirebase();
-    });
-  </script>
-  
-  <script>
     const mapa = document.getElementById('mapa');
     const lista = document.getElementById('lista');
     const botaoDesenhar = document.getElementById('botao-desenhar');
@@ -506,6 +464,44 @@
       carregar();
       carregarDesenhos();
     });
-  </script>
+    // === SINCRONIZAÇÃO DE MARCADORES ===
+    function syncFirebase() {
+      const marcadoresRef = ref(db, "marcadores");
+      const desenhosRef = ref(db, "desenhos");
+  
+      // 🔄 Atualiza em tempo real ao detectar mudanças
+      onValue(marcadoresRef, (snap) => {
+        const data = snap.val();
+        marcadores = data ? Object.values(data) : [];
+        render();
+      });
+  
+      onValue(desenhosRef, (snap) => {
+        const data = snap.val();
+        desenhos = data ? Object.values(data) : [];
+        renderDesenhos();
+      });
+    }
+  
+    // 🔼 Salva no Firebase
+    function salvar() {
+      set(ref(db, "marcadores"), marcadores.reduce((acc, m) => {
+        acc[m.id] = m;
+        return acc;
+      }, {}));
+    }
+  
+    function salvarDesenhos() {
+      set(ref(db, "desenhos"), desenhos.reduce((acc, d, i) => {
+        acc[i] = d;
+        return acc;
+      }, {}));
+    }
+  
+    // substitua o localStorage no final por:
+    window.addEventListener("load", () => {
+      syncFirebase();
+    });
+  </script>  
 </body>
 </html>
