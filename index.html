@@ -2,7 +2,7 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <title>Mapa - Marcadores e Desenho</title>
+  <title>Mapa - Marcadores e Desenho (Firebase)</title>
   <style>
     body {
       margin: 0;
@@ -12,7 +12,6 @@
       font-family: Arial, sans-serif;
     }
 
-    /* Lista lateral */
     #lista-marcadores {
       width: 24vw;
       min-width: 260px;
@@ -103,7 +102,6 @@
       color: #fff;
     }
 
-    /* === MODO DESENHO === */
     #canvas-desenho {
       position: absolute;
       top: 0;
@@ -129,33 +127,10 @@
       transition: transform 0.2s, background 0.2s;
     }
 
-    #botao-desenhar {
-      right: 10px;
-      background: #FF1493;
-      color: white;
-      font-size: 20px;
-    }
-
-    #botao-undo {
-      right: 60px;
-      background: #222;
-      color: #FFD700;
-      border: 1px solid #FFD700;
-    }
-
-    #botao-redo {
-      right: 110px;
-      background: #222;
-      color: #FFD700;
-      border: 1px solid #FFD700;
-    }
-
-    #botao-limpar {
-      right: 160px;
-      background: #8B0000;
-      color: #fff;
-      border: 1px solid #FF5555;
-    }
+    #botao-desenhar { right: 10px; background: #FF1493; color: white; font-size: 20px; }
+    #botao-undo { right: 60px; background: #222; color: #FFD700; border: 1px solid #FFD700; }
+    #botao-redo { right: 110px; background: #222; color: #FFD700; border: 1px solid #FFD700; }
+    #botao-limpar { right: 160px; background: #8B0000; color: #fff; border: 1px solid #FF5555; }
 
     #botao-desenhar:hover, #botao-undo:hover, #botao-redo:hover, #botao-limpar:hover {
       transform: scale(1.1);
@@ -163,7 +138,6 @@
       color: #111;
     }
 
-    /* Cor do desenho */
     #cor-desenho {
       position: absolute;
       top: 60px;
@@ -189,16 +163,34 @@
   <div id="mapa-container">
     <div id="mapa">
       <canvas id="canvas-desenho"></canvas>
-      <button id="botao-desenhar" title="Desenhar rota">✏️</button>
-      <button id="botao-undo" title="Desfazer último desenho">⬅️</button>
-      <button id="botao-redo" title="Refazer desenho">➡️</button>
-      <button id="botao-limpar" title="Limpar todos os desenhos">🗑️</button>
-      <!-- seletor de cor do desenho -->
-      <input type="color" id="cor-desenho" title="Cor do desenho" value="#00ff88">
+      <button id="botao-desenhar">✏️</button>
+      <button id="botao-undo">⬅️</button>
+      <button id="botao-redo">➡️</button>
+      <button id="botao-limpar">🗑️</button>
+      <input type="color" id="cor-desenho" value="#00ff88">
     </div>
   </div>
 
+  <!-- === Firebase SDK === -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-database.js"></script>
+
   <script>
+    // === CONFIGURAÇÃO DO FIREBASE ===
+    const firebaseConfig = {
+      apiKey: "AIzaSyD8XXv9g0O_oixHANgXmIv4AxyFQRKujsM",
+      authDomain: "redsec-1cc08.firebaseapp.com",
+      databaseURL: "https://redsec-1cc08-default-rtdb.firebaseio.com",
+      projectId: "redsec-1cc08",
+      storageBucket: "redsec-1cc08.firebasestorage.app",
+      messagingSenderId: "104593174106",
+      appId: "1:104593174106:web:0175ff1da573f981abf263",
+      measurementId: "G-C8BB5SS8CP"
+    };
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // === VARIÁVEIS GERAIS ===
     const mapa = document.getElementById('mapa');
     const lista = document.getElementById('lista');
     const canvas = document.getElementById('canvas-desenho');
@@ -210,79 +202,48 @@
     const corDesenhoInput = document.getElementById('cor-desenho');
 
     let marcadores = [];
+    let desenhos = [];
+    let desenhoAtual = null;
+    let historico = [];
+    let historicoIndex = -1;
+    let modoDesenhoAtivo = false;
+    let desenhando = false;
+    let corDesenho = corDesenhoInput.value;
+    let pos = { x: 0, y: 0 };
     let scale = 1;
+    let dragging = false;
     const minScale = 1.5;
     const maxScale = 10;
 
-    let pos = { x: 0, y: 0 };
-    let dragging = false;
-    let startMouse = { x: 0, y: 0 };
-    let startPos = { x: 0, y: 0 };
-    let modoDesenhoAtivo = false;
-    let desenhando = false;
+    // === FUNÇÕES FIREBASE ===
+    function salvarMarcadores() {
+      db.ref("marcadores").set(marcadores);
+    }
+    function salvarDesenhos() {
+      db.ref("desenhos").set(desenhos);
+    }
+    function carregarFirebase() {
+      db.ref("marcadores").on("value", (snap) => {
+        marcadores = snap.val() || [];
+        render();
+      });
+      db.ref("desenhos").on("value", (snap) => {
+        desenhos = snap.val() || [];
+        redesenhar();
+      });
+    }
 
-    // cor atual do desenho
-    let corDesenho = corDesenhoInput.value || '#00ff88';
-
-    corDesenhoInput.addEventListener('input', (e) => {
-      corDesenho = e.target.value;
-      // não mexe nos traços já desenhados (cada um já guarda sua cor)
-    });
-
-    // === Criar marcador ===
+    // === CRIAR MARCADORES ===
     mapa.addEventListener("click", (e) => {
-      if (modoDesenhoAtivo) return;
-      if (e.button !== 0) return;
+      if (modoDesenhoAtivo || e.button !== 0) return;
       const rect = mapa.getBoundingClientRect();
       const relX = (e.clientX - rect.left) / rect.width;
       const relY = (e.clientY - rect.top) / rect.height;
       const id = "mid_" + Date.now();
       marcadores.push({ id, x: relX, y: relY, titulo: "Novo marcador", descricao: "Adicione informações...", cor: "#FF1493" });
-      salvar();
-      render();
+      salvarMarcadores();
     });
 
-    // === Zoom ===
-    mapa.addEventListener("wheel", (e) => {
-      if (modoDesenhoAtivo) return;
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.1 : -0.1;
-      scale = Math.max(minScale, Math.min(maxScale, scale + delta));
-      limitarBordas();
-      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
-      canvas.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
-    }, { passive: false });
-
-    // === Arrastar mapa ===
-    mapa.addEventListener("mousedown", (e) => {
-      if (modoDesenhoAtivo || e.button !== 2) return;
-      dragging = true;
-      startMouse = { x: e.clientX, y: e.clientY };
-      startPos = { ...pos };
-      mapa.style.cursor = "grabbing";
-    });
-
-    window.addEventListener("mousemove", (e) => {
-      if (!dragging) return;
-      pos.x = startPos.x + (e.clientX - startMouse.x);
-      pos.y = startPos.y + (e.clientY - startMouse.y);
-      limitarBordas();
-      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
-      canvas.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
-    });
-
-    window.addEventListener("mouseup", () => { dragging = false; mapa.style.cursor = "default"; });
-    mapa.addEventListener("contextmenu", (e) => e.preventDefault());
-
-    function limitarBordas() {
-      const container = document.getElementById('mapa-container');
-      const viewW = container.clientWidth, viewH = container.clientHeight;
-      const maxX = viewW / 2, maxY = viewH / 2;
-      pos.x = Math.max(-maxX, Math.min(maxX, pos.x));
-      pos.y = Math.max(-maxY, Math.min(maxY, pos.y));
-    }
-
-    // === Renderização dos marcadores ===
     function render() {
       mapa.querySelectorAll(".marcador").forEach(m => m.remove());
       lista.innerHTML = "";
@@ -292,23 +253,6 @@
         marker.style.background = m.cor;
         marker.style.left = `${m.x * 768}px`;
         marker.style.top = `${m.y * 768}px`;
-
-        const info = document.createElement("div");
-        info.className = "info";
-        info.innerHTML = `<b>${m.titulo}</b><br>${m.descricao}`;
-        marker.appendChild(info);
-
-        marker.onclick = (ev) => {
-          info.style.display = info.style.display === "block" ? "none" : "block";
-          ev.stopPropagation();
-        };
-
-        marker.oncontextmenu = (ev) => {
-          ev.preventDefault();
-          marcadores = marcadores.filter(mm => mm.id !== m.id);
-          salvar(); render();
-        };
-
         mapa.appendChild(marker);
 
         const item = document.createElement("div");
@@ -326,30 +270,17 @@
           m.titulo = document.getElementById(`titulo_${m.id}`).value;
           m.descricao = document.getElementById(`desc_${m.id}`).value;
           m.cor = document.getElementById(`cor_${m.id}`).value;
-          salvar(); render();
+          salvarMarcadores();
         };
         item.querySelector(".del").onclick = () => {
           marcadores = marcadores.filter(mm => mm.id !== m.id);
-          salvar(); render();
+          salvarMarcadores();
         };
         lista.appendChild(item);
       });
     }
 
-    function salvar() { localStorage.setItem("marcadoresMapa", JSON.stringify(marcadores)); }
-    function carregar() {
-      const data = localStorage.getItem("marcadoresMapa");
-      if (data) marcadores = JSON.parse(data);
-      render();
-    }
-
-    // === DESENHO (AGORA COM COR POR TRAÇO) ===
-    // desenhos = [ { cor: '#rrggbb', pontos: [{x,y}, ...] }, ... ]
-    let desenhos = [];
-    let desenhoAtual = null;
-    let historico = [];
-    let historicoIndex = -1;
-
+    // === DESENHO ===
     function redimensionarCanvas() {
       canvas.width = mapa.clientWidth;
       canvas.height = mapa.clientHeight;
@@ -357,12 +288,10 @@
     }
     window.addEventListener('resize', redimensionarCanvas);
 
-    botaoDesenhar.addEventListener('click', (e) => {
-      e.stopPropagation();
+    botaoDesenhar.addEventListener('click', () => {
       modoDesenhoAtivo = !modoDesenhoAtivo;
       canvas.style.pointerEvents = modoDesenhoAtivo ? 'auto' : 'none';
       botaoDesenhar.style.background = modoDesenhoAtivo ? '#FFD700' : '#FF1493';
-      mapa.style.cursor = modoDesenhoAtivo ? 'crosshair' : 'default';
     });
 
     canvas.addEventListener('mousedown', (e) => {
@@ -378,14 +307,12 @@
       redesenhar();
     });
 
-    canvas.addEventListener('mouseleave', () => desenhando = false);
-
     window.addEventListener('mouseup', () => {
       if (desenhando) {
         desenhando = false;
-        if (desenhoAtual && desenhoAtual.pontos.length > 1) {
+        if (desenhoAtual.pontos.length > 1) {
           desenhos.push(desenhoAtual);
-          salvarEtapa();
+          salvarDesenhos();
         }
         desenhoAtual = null;
       }
@@ -395,22 +322,17 @@
       const rect = canvas.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
       const y = (e.clientY - rect.top) / rect.height;
-      if (!desenhoAtual) return;
       desenhoAtual.pontos.push({ x, y });
     }
 
     function redesenhar() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.lineWidth = 2;
-      ctx.lineCap = "round";
-
       const todas = [...desenhos];
       if (desenhando && desenhoAtual) todas.push(desenhoAtual);
-
       todas.forEach(traco => {
-        if (!traco.pontos || traco.pontos.length === 0) return;
         ctx.beginPath();
-        ctx.strokeStyle = traco.cor || "#00ff88";
+        ctx.strokeStyle = traco.cor;
+        ctx.lineWidth = 2;
         traco.pontos.forEach((p, i) => {
           const x = p.x * canvas.width;
           const y = p.y * canvas.height;
@@ -421,43 +343,17 @@
       });
     }
 
-    function salvarEtapa() {
-      historico = historico.slice(0, historicoIndex + 1);
-      historico.push(JSON.stringify(desenhos));
-      historicoIndex = historico.length - 1;
-    }
-
-    function restaurarEtapa() {
-      desenhos = historicoIndex >= 0 ? JSON.parse(historico[historicoIndex]) : [];
-      redesenhar();
-    }
-
-    botaoUndo.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (historicoIndex > 0) { historicoIndex--; restaurarEtapa(); }
-    });
-
-    botaoRedo.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (historicoIndex < historico.length - 1) { historicoIndex++; restaurarEtapa(); }
-    });
-
-    // === LIMPAR TUDO (somente desenhos) ===
-    botaoLimpar.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (confirm("Tem certeza que deseja apagar TODOS os desenhos? (Os marcadores permanecerão intactos)")) {
+    botaoLimpar.addEventListener('click', () => {
+      if (confirm("Apagar todos os desenhos?")) {
         desenhos = [];
-        desenhoAtual = null;
-        historico = [];
-        historicoIndex = -1;
+        salvarDesenhos();
         redesenhar();
       }
     });
 
     window.addEventListener('load', () => {
       redimensionarCanvas();
-      salvarEtapa();
-      carregar();
+      carregarFirebase();
     });
   </script>
 </body>
