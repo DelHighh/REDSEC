@@ -122,7 +122,8 @@
       transform: translate(-50%, -50%);
     }
 
-    #botao-desenhar, #botao-undo, #botao-redo, #botao-limpar {
+    /* Só desenhar e limpar agora */
+    #botao-desenhar, #botao-limpar {
       position: absolute;
       top: 10px;
       border: none;
@@ -143,28 +144,14 @@
       font-size: 20px;
     }
 
-    #botao-undo {
-      right: 60px;
-      background: #222;
-      color: #FFD700;
-      border: 1px solid #FFD700;
-    }
-
-    #botao-redo {
-      right: 110px;
-      background: #222;
-      color: #FFD700;
-      border: 1px solid #FFD700;
-    }
-
     #botao-limpar {
-      right: 160px;
+      right: 60px;
       background: #8B0000;
       color: #fff;
       border: 1px solid #FF5555;
     }
 
-    #botao-desenhar:hover, #botao-undo:hover, #botao-redo:hover, #botao-limpar:hover {
+    #botao-desenhar:hover, #botao-limpar:hover {
       transform: scale(1.1);
       background: #FFD700;
       color: #111;
@@ -197,8 +184,6 @@
     <div id="mapa">
       <div id="desenhos-container"></div>
       <button id="botao-desenhar" title="Desenhar rota">✏️</button>
-      <button id="botao-undo" title="Desfazer último desenho">⬅️</button>
-      <button id="botao-redo" title="Refazer desenho">➡️</button>
       <button id="botao-limpar" title="Limpar todos os desenhos">🗑️</button>
       <!-- seletor de cor do desenho -->
       <input type="color" id="cor-desenho" title="Cor do desenho" value="#00ff88">
@@ -209,8 +194,6 @@
     const mapa = document.getElementById('mapa');
     const lista = document.getElementById('lista');
     const botaoDesenhar = document.getElementById('botao-desenhar');
-    const botaoUndo = document.getElementById('botao-undo');
-    const botaoRedo = document.getElementById('botao-redo');
     const botaoLimpar = document.getElementById('botao-limpar');
     const corDesenhoInput = document.getElementById('cor-desenho');
 
@@ -348,9 +331,6 @@
     // === DESENHO COM DIVS FIXAS ===
     let desenhos = [];
     let desenhoAtual = null;
-    let historico = [];
-    let historicoIndex = -1;
-
 
     botaoDesenhar.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -377,115 +357,85 @@
         if (desenhoAtual.pontos.length > 1) {
           desenhos.push(desenhoAtual);
           salvarDesenhos();
-          salvarEtapa();
         }
         desenhoAtual = null;
       }
     });
 
     function registrarPontoDesenho(e) {
-  const rect = mapa.getBoundingClientRect();
-  const relX = (e.clientX - rect.left) / rect.width;
-  const relY = (e.clientY - rect.top) / rect.height;
+      const rect = mapa.getBoundingClientRect();
+      const relX = (e.clientX - rect.left) / rect.width;
+      const relY = (e.clientY - rect.top) / rect.height;
 
-  const ultimo = desenhoAtual.pontos[desenhoAtual.pontos.length - 1];
+      const ultimo = desenhoAtual.pontos[desenhoAtual.pontos.length - 1];
 
-  // Primeiro ponto do traço
-  if (!ultimo) {
-    const ponto = { x: relX, y: relY, cor: corDesenho };
-    desenhoAtual.pontos.push(ponto);
-    desenharPonto(ponto);
-    return;
-  }
+      // Primeiro ponto do traço
+      if (!ultimo) {
+        const ponto = { x: relX, y: relY, cor: corDesenho };
+        desenhoAtual.pontos.push(ponto);
+        desenharPonto(ponto);
+        return;
+      }
 
-  // Calcula distância entre o último e o novo ponto
-  const dx = relX - ultimo.x;
-  const dy = relY - ultimo.y;
-  const distRel = Math.sqrt(dx * dx + dy * dy);
+      // Calcula distância entre o último e o novo ponto
+      const dx = relX - ultimo.x;
+      const dy = relY - ultimo.y;
+      const distRel = Math.sqrt(dx * dx + dy * dy);
 
-  // Define espaçamento entre pontos (quanto menor, mais contínuo)
-  const espacamentoPx = 0.8; // ajuste fino: 1.0 = muito denso, 2.5 = mais leve
-  const distPx = distRel * 768;
-  const steps = Math.max(1, Math.round(distPx / espacamentoPx));
+      // Define espaçamento entre pontos (quanto menor, mais contínuo)
+      const espacamentoPx = 0.8; // ajuste fino
+      const distPx = distRel * 768;
+      const steps = Math.max(1, Math.round(distPx / espacamentoPx));
 
-  // Cria pontos intermediários suaves
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const x = ultimo.x + dx * t;
-    const y = ultimo.y + dy * t;
-    const ponto = { x, y, cor: corDesenho };
-    desenhoAtual.pontos.push(ponto);
-    desenharPonto(ponto);
-  }
-}
+      // Cria pontos intermediários suaves
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const x = ultimo.x + dx * t;
+        const y = ultimo.y + dy * t;
+        const ponto = { x, y, cor: corDesenho };
+        desenhoAtual.pontos.push(ponto);
+        desenharPonto(ponto);
+      }
+    }
 
-function desenharPonto(p) {
-  const div = document.createElement("div");
-  div.className = "ponto-desenho";
-  div.style.background = p.cor;
-  div.style.left = `${p.x * 768}px`;
-  div.style.top = `${p.y * 768}px`;
-  document.getElementById("desenhos-container").appendChild(div);
-}
+    function desenharPonto(p) {
+      const div = document.createElement("div");
+      div.className = "ponto-desenho";
+      div.style.background = p.cor;
+      div.style.left = `${p.x * 768}px`;
+      div.style.top = `${p.y * 768}px`;
+      document.getElementById("desenhos-container").appendChild(div);
+    }
 
-function renderDesenhos() {
-  const container = document.getElementById("desenhos-container");
-  container.innerHTML = "";
-  desenhos.forEach(traco => traco.pontos.forEach(p => desenharPonto(p)));
-}
+    function renderDesenhos() {
+      const container = document.getElementById("desenhos-container");
+      container.innerHTML = "";
+      desenhos.forEach(traco => traco.pontos.forEach(p => desenharPonto(p)));
+    }
 
-function salvarDesenhos() {
-  localStorage.setItem("desenhosMapa", JSON.stringify(desenhos));
-}
-function salvarEtapa() {
-  historico = historico.slice(0, historicoIndex + 1);
-  historico.push(JSON.stringify(desenhos));
-  historicoIndex = historico.length - 1;
-}
+    function salvarDesenhos() {
+      localStorage.setItem("desenhosMapa", JSON.stringify(desenhos));
+    }
 
-function restaurarEtapa() {
-  desenhos = historicoIndex >= 0 ? JSON.parse(historico[historicoIndex]) : [];
-  renderDesenhos();
-  salvarDesenhos();
-}
+    function carregarDesenhos() {
+      const data = localStorage.getItem("desenhosMapa");
+      if (data) desenhos = JSON.parse(data);
+      renderDesenhos();
+    }
 
-function carregarDesenhos() {
-  const data = localStorage.getItem("desenhosMapa");
-  if (data) desenhos = JSON.parse(data);
-  renderDesenhos();
-}
-botaoUndo.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (historicoIndex > 0) {
-    historicoIndex--;
-    restaurarEtapa();
-  }
-});
+    botaoLimpar.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (confirm("Apagar TODOS os desenhos?")) {
+        desenhos = [];
+        salvarDesenhos();
+        renderDesenhos();
+      }
+    });
 
-botaoRedo.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (historicoIndex < historico.length - 1) {
-    historicoIndex++;
-    restaurarEtapa();
-  }
-});
-
-botaoLimpar.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (confirm("Apagar TODOS os desenhos?")) {
-    desenhos = [];
-    salvarDesenhos();
-    renderDesenhos();
-  }
-});
-
-window.addEventListener("load", () => {
-  carregar();
-  carregarDesenhos();
-  salvarEtapa();
-
-});
-
+    window.addEventListener("load", () => {
+      carregar();
+      carregarDesenhos();
+    });
   </script>
 </body>
 </html>
