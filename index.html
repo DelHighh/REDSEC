@@ -348,6 +348,9 @@
     // === DESENHO COM DIVS FIXAS ===
     let desenhos = [];
     let desenhoAtual = null;
+    let historico = [];
+    let historicoIndex = -1;
+
 
     botaoDesenhar.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -374,6 +377,7 @@
         if (desenhoAtual.pontos.length > 1) {
           desenhos.push(desenhoAtual);
           salvarDesenhos();
+          salvarEtapa();
         }
         desenhoAtual = null;
       }
@@ -433,12 +437,38 @@ function renderDesenhos() {
 function salvarDesenhos() {
   localStorage.setItem("desenhosMapa", JSON.stringify(desenhos));
 }
+function salvarEtapa() {
+  historico = historico.slice(0, historicoIndex + 1);
+  historico.push(JSON.stringify(desenhos));
+  historicoIndex = historico.length - 1;
+}
+
+function restaurarEtapa() {
+  desenhos = historicoIndex >= 0 ? JSON.parse(historico[historicoIndex]) : [];
+  renderDesenhos();
+  salvarDesenhos();
+}
 
 function carregarDesenhos() {
   const data = localStorage.getItem("desenhosMapa");
   if (data) desenhos = JSON.parse(data);
   renderDesenhos();
 }
+botaoUndo.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (historicoIndex > 0) {
+    historicoIndex--;
+    restaurarEtapa();
+  }
+});
+
+botaoRedo.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (historicoIndex < historico.length - 1) {
+    historicoIndex++;
+    restaurarEtapa();
+  }
+});
 
 botaoLimpar.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -452,6 +482,8 @@ botaoLimpar.addEventListener("click", (e) => {
 window.addEventListener("load", () => {
   carregar();
   carregarDesenhos();
+  salvarEtapa();
+
 });
 
   </script>
