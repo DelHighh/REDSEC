@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Mapa - Marcadores e Desenho (Firebase)</title>
   <style>
     body {
@@ -188,7 +188,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
-    import { getDatabase, ref, onValue, set, get, remove } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
+    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyD8XXv9g0O_oixHANgXmIv4AxyFQRKujsM",
@@ -212,25 +212,34 @@
 
     let marcadores = [];
     let desenhos = [];
+    let scale = 1;
+    const minScale = 0.9;
+    const maxScale = 10;
 
-    let scale = 1, pos = { x: 0, y: 0 };
-    let dragging = false, startMouse = {}, startPos = {};
-    let modoDesenhoAtivo = false, desenhando = false;
-    let corDesenho = corDesenhoInput.value;
+    let pos = { x: 0, y: 0 };
+    let dragging = false;
+    let startMouse = { x: 0, y: 0 };
+    let startPos = { x: 0, y: 0 };
+    let modoDesenhoAtivo = false;
+    let desenhando = false;
+    let corDesenho = corDesenhoInput.value || '#00ff88';
+    let desenhoAtual = null;
 
-    corDesenhoInput.addEventListener('input', e => corDesenho = e.target.value);
+    corDesenhoInput.addEventListener('input', (e) => { corDesenho = e.target.value; });
 
     // === Firebase listeners ===
     const marcadoresRef = ref(db, 'marcadores');
     const desenhosRef = ref(db, 'desenhos');
 
     onValue(marcadoresRef, snapshot => {
-      marcadores = snapshot.val() ? Object.values(snapshot.val()) : [];
+      const data = snapshot.val();
+      marcadores = data ? Object.values(data) : [];
       render();
     });
 
     onValue(desenhosRef, snapshot => {
-      desenhos = snapshot.val() ? Object.values(snapshot.val()) : [];
+      const data = snapshot.val();
+      desenhos = data ? Object.values(data) : [];
       renderDesenhos();
     });
 
@@ -246,9 +255,10 @@
       set(desenhosRef, updates);
     }
 
-    // === Marcadores ===
-    mapa.addEventListener("click", e => {
-      if (modoDesenhoAtivo || e.button !== 0) return;
+    // === Criar marcador ===
+    mapa.addEventListener("click", (e) => {
+      if (modoDesenhoAtivo) return;
+      if (e.button !== 0) return;
       const rect = mapa.getBoundingClientRect();
       const relX = (e.clientX - rect.left) / rect.width;
       const relY = (e.clientY - rect.top) / rect.height;
@@ -257,6 +267,44 @@
       salvar();
     });
 
+    // === Zoom ===
+    mapa.addEventListener("wheel", (e) => {
+      if (modoDesenhoAtivo) return;
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      scale = Math.max(minScale, Math.min(maxScale, scale + delta));
+      limitarBordas();
+      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+    }, { passive: false });
+
+    mapa.addEventListener("mousedown", (e) => {
+      if (modoDesenhoAtivo || e.button !== 2) return;
+      dragging = true;
+      startMouse = { x: e.clientX, y: e.clientY };
+      startPos = { ...pos };
+      mapa.style.cursor = "grabbing";
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+      pos.x = startPos.x + (e.clientX - startMouse.x);
+      pos.y = startPos.y + (e.clientY - startMouse.y);
+      limitarBordas();
+      mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
+    });
+
+    window.addEventListener("mouseup", () => { dragging = false; mapa.style.cursor = "default"; });
+    mapa.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    function limitarBordas() {
+      const container = document.getElementById('mapa-container');
+      const viewW = container.clientWidth, viewH = container.clientHeight;
+      const maxX = viewW / 2, maxY = viewH / 2;
+      pos.x = Math.max(-maxX, Math.min(maxX, pos.x));
+      pos.y = Math.max(-maxY, Math.min(maxY, pos.y));
+    }
+
+    // === Renderização dos marcadores ===
     function render() {
       mapa.querySelectorAll(".marcador").forEach(m => m.remove());
       lista.innerHTML = "";
@@ -272,12 +320,12 @@
         info.innerHTML = `<b>${m.titulo}</b><br>${m.descricao}`;
         marker.appendChild(info);
 
-        marker.onclick = ev => {
+        marker.onclick = (ev) => {
           info.style.display = info.style.display === "block" ? "none" : "block";
           ev.stopPropagation();
         };
 
-        marker.oncontextmenu = ev => {
+        marker.oncontextmenu = (ev) => {
           ev.preventDefault();
           marcadores = marcadores.filter(mm => mm.id !== m.id);
           salvar();
@@ -310,23 +358,24 @@
       });
     }
 
-    // === Desenho ===
-    botaoDesenhar.addEventListener("click", e => {
+    // === DESENHO COM DIVS FIXAS ===
+    botaoDesenhar.addEventListener("click", (e) => {
       e.stopPropagation();
       modoDesenhoAtivo = !modoDesenhoAtivo;
       botaoDesenhar.style.background = modoDesenhoAtivo ? "#FFD700" : "#FF1493";
       mapa.style.cursor = modoDesenhoAtivo ? "crosshair" : "default";
     });
 
-    mapa.addEventListener("mousedown", e => {
+    mapa.addEventListener("mousedown", (e) => {
       if (!modoDesenhoAtivo || e.button !== 0) return;
       desenhando = true;
       desenhoAtual = { cor: corDesenho, pontos: [] };
       registrarPontoDesenho(e);
     });
 
-    mapa.addEventListener("mousemove", e => {
-      if (desenhando) registrarPontoDesenho(e);
+    mapa.addEventListener("mousemove", (e) => {
+      if (!desenhando) return;
+      registrarPontoDesenho(e);
     });
 
     window.addEventListener("mouseup", () => {
@@ -344,9 +393,27 @@
       const rect = mapa.getBoundingClientRect();
       const relX = (e.clientX - rect.left) / rect.width;
       const relY = (e.clientY - rect.top) / rect.height;
-      const ponto = { x: relX, y: relY, cor: corDesenho };
-      desenhoAtual.pontos.push(ponto);
-      desenharPonto(ponto);
+      const ultimo = desenhoAtual.pontos[desenhoAtual.pontos.length - 1];
+      if (!ultimo) {
+        const ponto = { x: relX, y: relY, cor: corDesenho };
+        desenhoAtual.pontos.push(ponto);
+        desenharPonto(ponto);
+        return;
+      }
+      const dx = relX - ultimo.x;
+      const dy = relY - ultimo.y;
+      const distRel = Math.sqrt(dx * dx + dy * dy);
+      const espacamentoPx = 0.8;
+      const distPx = distRel * 768;
+      const steps = Math.max(1, Math.round(distPx / espacamentoPx));
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const x = ultimo.x + dx * t;
+        const y = ultimo.y + dy * t;
+        const ponto = { x, y, cor: corDesenho };
+        desenhoAtual.pontos.push(ponto);
+        desenharPonto(ponto);
+      }
     }
 
     function desenharPonto(p) {
@@ -364,11 +431,12 @@
       desenhos.forEach(traco => traco.pontos.forEach(p => desenharPonto(p)));
     }
 
-    botaoLimpar.addEventListener("click", e => {
+    botaoLimpar.addEventListener("click", (e) => {
       e.stopPropagation();
       if (confirm("Apagar TODOS os desenhos?")) {
         desenhos = [];
         salvarDesenhos();
+        renderDesenhos();
       }
     });
   </script>
