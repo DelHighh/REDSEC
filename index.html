@@ -175,6 +175,22 @@
   </style>
 </head>
 <body>
+  <script>
+    const senhaCorreta = "bridges"; // 🔐 defina sua senha aqui
+    const tentativa = prompt("Digite a senha para acessar o mapa:");
+  
+    if (tentativa !== senhaCorreta) {
+      document.body.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#111;color:#FFD700;font-family:Arial,sans-serif;text-align:center;">
+          <div>
+            <h2>🔒 Acesso negado</h2>
+            <p>Senha incorreta. Recarregue a página e tente novamente.</p>
+          </div>
+        </div>`;
+      throw new Error("Acesso negado");
+    }
+  </script>
+  
   <div id="lista-marcadores">
     <h3>Marcadores</h3>
     <div id="lista"></div>
