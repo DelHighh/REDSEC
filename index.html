@@ -2,7 +2,7 @@
 <html lang="pt">
 <head>
   <meta charset="UTF-8">
-  <title>Mapa - Marcadores e Desenho (Firebase)</title>
+  <title>Mapa - Marcadores e Desenho</title>
   <style>
     body {
       margin: 0;
@@ -12,6 +12,7 @@
       font-family: Arial, sans-serif;
     }
 
+    /* Lista lateral */
     #lista-marcadores {
       width: 24vw;
       min-width: 260px;
@@ -102,6 +103,7 @@
       color: #fff;
     }
 
+    /* === MODO DESENHO === */
     #desenhos-container {
       position: absolute;
       top: 0;
@@ -120,6 +122,7 @@
       transform: translate(-50%, -50%);
     }
 
+    /* Só desenhar e limpar agora */
     #botao-desenhar, #botao-limpar {
       position: absolute;
       top: 10px;
@@ -154,6 +157,7 @@
       color: #111;
     }
 
+    /* Cor do desenho */
     #cor-desenho {
       position: absolute;
       top: 60px;
@@ -181,29 +185,12 @@
       <div id="desenhos-container"></div>
       <button id="botao-desenhar" title="Desenhar rota">✏️</button>
       <button id="botao-limpar" title="Limpar todos os desenhos">🗑️</button>
+      <!-- seletor de cor do desenho -->
       <input type="color" id="cor-desenho" title="Cor do desenho" value="#00ff88">
     </div>
   </div>
 
-  <!-- Firebase SDK -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
-    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyD8XXv9g0O_oixHANgXmIv4AxyFQRKujsM",
-      authDomain: "redsec-1cc08.firebaseapp.com",
-      databaseURL: "https://redsec-1cc08-default-rtdb.firebaseio.com",
-      projectId: "redsec-1cc08",
-      storageBucket: "redsec-1cc08.firebasestorage.app",
-      messagingSenderId: "104593174106",
-      appId: "1:104593174106:web:0175ff1da573f981abf263",
-      measurementId: "G-C8BB5SS8CP"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
+  <script>
     const mapa = document.getElementById('mapa');
     const lista = document.getElementById('lista');
     const botaoDesenhar = document.getElementById('botao-desenhar');
@@ -211,7 +198,6 @@
     const corDesenhoInput = document.getElementById('cor-desenho');
 
     let marcadores = [];
-    let desenhos = [];
     let scale = 1;
     const minScale = 0.9;
     const maxScale = 10;
@@ -222,38 +208,13 @@
     let startPos = { x: 0, y: 0 };
     let modoDesenhoAtivo = false;
     let desenhando = false;
+
+    // cor atual do desenho
     let corDesenho = corDesenhoInput.value || '#00ff88';
-    let desenhoAtual = null;
 
-    corDesenhoInput.addEventListener('input', (e) => { corDesenho = e.target.value; });
-
-    // === Firebase listeners ===
-    const marcadoresRef = ref(db, 'marcadores');
-    const desenhosRef = ref(db, 'desenhos');
-
-    onValue(marcadoresRef, snapshot => {
-      const data = snapshot.val();
-      marcadores = data ? Object.values(data) : [];
-      render();
+    corDesenhoInput.addEventListener('input', (e) => {
+      corDesenho = e.target.value;
     });
-
-    onValue(desenhosRef, snapshot => {
-      const data = snapshot.val();
-      desenhos = data ? Object.values(data) : [];
-      renderDesenhos();
-    });
-
-    function salvar() {
-      const updates = {};
-      marcadores.forEach(m => updates[m.id] = m);
-      set(marcadoresRef, updates);
-    }
-
-    function salvarDesenhos() {
-      const updates = {};
-      desenhos.forEach((d, i) => updates[i] = d);
-      set(desenhosRef, updates);
-    }
 
     // === Criar marcador ===
     mapa.addEventListener("click", (e) => {
@@ -265,6 +226,7 @@
       const id = "mid_" + Date.now();
       marcadores.push({ id, x: relX, y: relY, titulo: "Novo marcador", descricao: "Adicione informações...", cor: "#FF1493" });
       salvar();
+      render();
     });
 
     // === Zoom ===
@@ -277,6 +239,7 @@
       mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
     }, { passive: false });
 
+    // === Arrastar mapa ===
     mapa.addEventListener("mousedown", (e) => {
       if (modoDesenhoAtivo || e.button !== 2) return;
       dragging = true;
@@ -328,7 +291,7 @@
         marker.oncontextmenu = (ev) => {
           ev.preventDefault();
           marcadores = marcadores.filter(mm => mm.id !== m.id);
-          salvar();
+          salvar(); render();
         };
 
         mapa.appendChild(marker);
@@ -348,17 +311,38 @@
           m.titulo = document.getElementById(`titulo_${m.id}`).value;
           m.descricao = document.getElementById(`desc_${m.id}`).value;
           m.cor = document.getElementById(`cor_${m.id}`).value;
-          salvar();
+          salvar(); render();
         };
         item.querySelector(".del").onclick = () => {
           marcadores = marcadores.filter(mm => mm.id !== m.id);
-          salvar();
+          salvar(); render();
         };
         lista.appendChild(item);
       });
     }
 
+    // --- Salvar no Firebase e localStorage ---
+async function salvar() {
+  localStorage.setItem("marcadoresMapa", JSON.stringify(marcadores));
+  if (!window.db) return;
+  await window.dbSet(window.dbRef(window.db, "mapa/marcadores"), marcadores);
+}
+
+// --- Carregar com sincronização em tempo real ---
+function carregar() {
+  if (!window.db) return;
+  window.dbOnValue(window.dbRef(window.db, "mapa/marcadores"), (snapshot) => {
+    const data = snapshot.val();
+    marcadores = data ? data : [];
+    render();
+  });
+}
+
+
     // === DESENHO COM DIVS FIXAS ===
+    let desenhos = [];
+    let desenhoAtual = null;
+
     botaoDesenhar.addEventListener("click", (e) => {
       e.stopPropagation();
       modoDesenhoAtivo = !modoDesenhoAtivo;
@@ -393,19 +377,28 @@
       const rect = mapa.getBoundingClientRect();
       const relX = (e.clientX - rect.left) / rect.width;
       const relY = (e.clientY - rect.top) / rect.height;
+
       const ultimo = desenhoAtual.pontos[desenhoAtual.pontos.length - 1];
+
+      // Primeiro ponto do traço
       if (!ultimo) {
         const ponto = { x: relX, y: relY, cor: corDesenho };
         desenhoAtual.pontos.push(ponto);
         desenharPonto(ponto);
         return;
       }
+
+      // Calcula distância entre o último e o novo ponto
       const dx = relX - ultimo.x;
       const dy = relY - ultimo.y;
       const distRel = Math.sqrt(dx * dx + dy * dy);
-      const espacamentoPx = 0.8;
+
+      // Define espaçamento entre pontos (quanto menor, mais contínuo)
+      const espacamentoPx = 0.8; // ajuste fino
       const distPx = distRel * 768;
       const steps = Math.max(1, Math.round(distPx / espacamentoPx));
+
+      // Cria pontos intermediários suaves
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const x = ultimo.x + dx * t;
@@ -431,6 +424,22 @@
       desenhos.forEach(traco => traco.pontos.forEach(p => desenharPonto(p)));
     }
 
+    async function salvarDesenhos() {
+  localStorage.setItem("desenhosMapa", JSON.stringify(desenhos));
+  if (!window.db) return;
+  await window.dbSet(window.dbRef(window.db, "mapa/desenhos"), desenhos);
+}
+
+function carregarDesenhos() {
+  if (!window.db) return;
+  window.dbOnValue(window.dbRef(window.db, "mapa/desenhos"), (snapshot) => {
+    const data = snapshot.val();
+    desenhos = data ? data : [];
+    renderDesenhos();
+  });
+}
+
+
     botaoLimpar.addEventListener("click", (e) => {
       e.stopPropagation();
       if (confirm("Apagar TODOS os desenhos?")) {
@@ -439,6 +448,36 @@
         renderDesenhos();
       }
     });
+
+    window.addEventListener("load", () => {
+      carregar();
+      carregarDesenhos();
+    });
+    
+    type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+  import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD8XXv9g0O_oixHANgXmIv4AxyFQRKujsM",
+    authDomain: "redsec-1cc08.firebaseapp.com",
+    databaseURL: "https://redsec-1cc08-default-rtdb.firebaseio.com",
+    projectId: "redsec-1cc08",
+    storageBucket: "redsec-1cc08.firebasestorage.app",
+    messagingSenderId: "104593174106",
+    appId: "1:104593174106:web:0175ff1da573f981abf263",
+    measurementId: "G-C8BB5SS8CP"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // Tornar Firebase acessível ao outro script
+  window.db = db;
+  window.dbRef = ref;
+  window.dbSet = set;
+  window.dbOnValue = onValue;
+
   </script>
 </body>
 </html>
