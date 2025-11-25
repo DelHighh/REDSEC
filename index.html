@@ -185,8 +185,25 @@
     </div>
   </div>
 
-  <!-- Script principal do mapa -->
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD8XXv9g0O_oixHANgXmIv4AxyFQRKujsM",
+      authDomain: "redsec-1cc08.firebaseapp.com",
+      databaseURL: "https://redsec-1cc08-default-rtdb.firebaseio.com",
+      projectId: "redsec-1cc08",
+      storageBucket: "redsec-1cc08.firebasestorage.app",
+      messagingSenderId: "104593174106",
+      appId: "1:104593174106:web:0175ff1da573f981abf263",
+      measurementId: "G-C8BB5SS8CP"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // ---------- Mapa e variáveis ----------
     const mapa = document.getElementById('mapa');
     const lista = document.getElementById('lista');
     const botaoDesenhar = document.getElementById('botao-desenhar');
@@ -194,6 +211,8 @@
     const corDesenhoInput = document.getElementById('cor-desenho');
 
     let marcadores = [];
+    let desenhos = [];
+    let desenhoAtual = null;
     let scale = 1;
     const minScale = 0.9;
     const maxScale = 10;
@@ -207,7 +226,7 @@
 
     corDesenhoInput.addEventListener('input', e => corDesenho = e.target.value);
 
-    // === Criar marcador ===
+    // ---------- Marcadores ----------
     mapa.addEventListener("click", (e) => {
       if (modoDesenhoAtivo || e.button !== 0) return;
       const rect = mapa.getBoundingClientRect();
@@ -219,7 +238,6 @@
       render();
     });
 
-    // === Zoom ===
     mapa.addEventListener("wheel", (e) => {
       if (modoDesenhoAtivo) return;
       e.preventDefault();
@@ -229,7 +247,6 @@
       mapa.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(${scale})`;
     }, { passive: false });
 
-    // === Arrastar mapa ===
     mapa.addEventListener("mousedown", (e) => {
       if (modoDesenhoAtivo || e.button !== 2) return;
       dragging = true;
@@ -257,7 +274,7 @@
       pos.y = Math.max(-maxY, Math.min(maxY, pos.y));
     }
 
-    // === Renderização ===
+    // ---------- Renderização ----------
     function render() {
       mapa.querySelectorAll(".marcador").forEach(m => m.remove());
       lista.innerHTML = "";
@@ -273,12 +290,12 @@
         info.innerHTML = `<b>${m.titulo}</b><br>${m.descricao}`;
         marker.appendChild(info);
 
-        marker.onclick = ev => {
+        marker.onclick = (ev) => {
           info.style.display = info.style.display === "block" ? "none" : "block";
           ev.stopPropagation();
         };
 
-        marker.oncontextmenu = ev => {
+        marker.oncontextmenu = (ev) => {
           ev.preventDefault();
           marcadores = marcadores.filter(mm => mm.id !== m.id);
           salvar(); render();
@@ -311,41 +328,52 @@
       });
     }
 
-    // === Firebase Sync ===
+    // ---------- Firebase ----------
     async function salvar() {
       localStorage.setItem("marcadoresMapa", JSON.stringify(marcadores));
-      if (!window.db) return;
-      await window.dbSet(window.dbRef(window.db, "mapa/marcadores"), marcadores);
+      await set(ref(db, "mapa/marcadores"), marcadores);
     }
 
     function carregar() {
-      if (!window.db) return;
-      window.dbOnValue(window.dbRef(window.db, "mapa/marcadores"), (snapshot) => {
+      onValue(ref(db, "mapa/marcadores"), (snapshot) => {
         const data = snapshot.val();
         marcadores = data ? data : [];
         render();
       });
     }
 
-    // === Desenho ===
-    let desenhos = [];
-    let desenhoAtual = null;
+    async function salvarDesenhos() {
+      localStorage.setItem("desenhosMapa", JSON.stringify(desenhos));
+      await set(ref(db, "mapa/desenhos"), desenhos);
+    }
 
-    botaoDesenhar.addEventListener("click", e => {
+    function carregarDesenhos() {
+      onValue(ref(db, "mapa/desenhos"), (snapshot) => {
+        const data = snapshot.val();
+        desenhos = data ? data : [];
+        renderDesenhos();
+      });
+    }
+
+    // ---------- Desenho ----------
+    botaoDesenhar.addEventListener("click", (e) => {
       e.stopPropagation();
       modoDesenhoAtivo = !modoDesenhoAtivo;
       botaoDesenhar.style.background = modoDesenhoAtivo ? "#FFD700" : "#FF1493";
       mapa.style.cursor = modoDesenhoAtivo ? "crosshair" : "default";
     });
 
-    mapa.addEventListener("mousedown", e => {
+    mapa.addEventListener("mousedown", (e) => {
       if (!modoDesenhoAtivo || e.button !== 0) return;
       desenhando = true;
       desenhoAtual = { cor: corDesenho, pontos: [] };
       registrarPontoDesenho(e);
     });
 
-    mapa.addEventListener("mousemove", e => { if (desenhando) registrarPontoDesenho(e); });
+    mapa.addEventListener("mousemove", (e) => {
+      if (!desenhando) return;
+      registrarPontoDesenho(e);
+    });
 
     window.addEventListener("mouseup", () => {
       if (desenhando) {
@@ -382,22 +410,7 @@
       desenhos.forEach(traco => traco.pontos.forEach(p => desenharPonto(p)));
     }
 
-    async function salvarDesenhos() {
-      localStorage.setItem("desenhosMapa", JSON.stringify(desenhos));
-      if (!window.db) return;
-      await window.dbSet(window.dbRef(window.db, "mapa/desenhos"), desenhos);
-    }
-
-    function carregarDesenhos() {
-      if (!window.db) return;
-      window.dbOnValue(window.dbRef(window.db, "mapa/desenhos"), (snapshot) => {
-        const data = snapshot.val();
-        desenhos = data ? data : [];
-        renderDesenhos();
-      });
-    }
-
-    botaoLimpar.addEventListener("click", e => {
+    botaoLimpar.addEventListener("click", (e) => {
       e.stopPropagation();
       if (confirm("Apagar TODOS os desenhos?")) {
         desenhos = [];
@@ -410,31 +423,6 @@
       carregar();
       carregarDesenhos();
     });
-  </script>
-
-  <!-- Script separado do Firebase -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyD8XXv9g0O_oixHANgXmIv4AxyFQRKujsM",
-      authDomain: "redsec-1cc08.firebaseapp.com",
-      databaseURL: "https://redsec-1cc08-default-rtdb.firebaseio.com",
-      projectId: "redsec-1cc08",
-      storageBucket: "redsec-1cc08.firebasestorage.app",
-      messagingSenderId: "104593174106",
-      appId: "1:104593174106:web:0175ff1da573f981abf263",
-      measurementId: "G-C8BB5SS8CP"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-
-    window.db = db;
-    window.dbRef = ref;
-    window.dbSet = set;
-    window.dbOnValue = onValue;
   </script>
 </body>
 </html>
