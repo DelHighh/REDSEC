@@ -207,6 +207,23 @@
   
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    // === SINCRONIZAÇÃO EM TEMPO REAL COM FIREBASE ===
+const refMarcadores = ref(db, "marcadores");
+const refDesenhos = ref(db, "desenhos");
+
+// Sempre que o banco mudar, atualiza o mapa
+onValue(refMarcadores, (snap) => {
+  const data = snap.val();
+  marcadores = data ? Object.values(data) : [];
+  render();
+});
+
+onValue(refDesenhos, (snap) => {
+  const data = snap.val();
+  desenhos = data ? Object.values(data) : [];
+  renderDesenhos();
+});
+
     const mapa = document.getElementById('mapa');
     const lista = document.getElementById('lista');
     const botaoDesenhar = document.getElementById('botao-desenhar');
@@ -345,11 +362,7 @@
   }, {}));
 }
 
-    function carregar() {
-      const data = localStorage.getItem("marcadoresMapa");
-      if (data) marcadores = JSON.parse(data);
-      render();
-    }
+    
 
     // === DESENHO COM DIVS FIXAS ===
     let desenhos = [];
@@ -445,11 +458,7 @@
 }
 
 
-    function carregarDesenhos() {
-      const data = localStorage.getItem("desenhosMapa");
-      if (data) desenhos = JSON.parse(data);
-      renderDesenhos();
-    }
+    
 
     botaoLimpar.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -460,48 +469,7 @@
       }
     });
 
-    window.addEventListener("load", () => {
-      carregar();
-      carregarDesenhos();
-    });
-    // === SINCRONIZAÇÃO DE MARCADORES ===
-    function syncFirebase() {
-      const marcadoresRef = ref(db, "marcadores");
-      const desenhosRef = ref(db, "desenhos");
-  
-      // 🔄 Atualiza em tempo real ao detectar mudanças
-      onValue(marcadoresRef, (snap) => {
-        const data = snap.val();
-        marcadores = data ? Object.values(data) : [];
-        render();
-      });
-  
-      onValue(desenhosRef, (snap) => {
-        const data = snap.val();
-        desenhos = data ? Object.values(data) : [];
-        renderDesenhos();
-      });
-    }
-  
-    // 🔼 Salva no Firebase
-    function salvar() {
-      set(ref(db, "marcadores"), marcadores.reduce((acc, m) => {
-        acc[m.id] = m;
-        return acc;
-      }, {}));
-    }
-  
-    function salvarDesenhos() {
-      set(ref(db, "desenhos"), desenhos.reduce((acc, d, i) => {
-        acc[i] = d;
-        return acc;
-      }, {}));
-    }
-  
-    // substitua o localStorage no final por:
-    window.addEventListener("load", () => {
-      syncFirebase();
-    });
+    
   </script>  
 </body>
 </html>
